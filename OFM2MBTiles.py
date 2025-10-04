@@ -103,13 +103,14 @@ async def download_tile(session, url, z, x, y):
     return None
 
 
-async def fetch_all_tiles(tiles, bbox, airac_cycle, min_zoom, max_zoom, show_progress):
+async def fetch_all_tiles(tiles, bbox, airac_cycle, oaci_prefix, min_zoom, max_zoom, show_progress):
     """_summary_
 
     Args:
         tiles (_type_): _description_
         bbox (_type_): _description_
         airac_cycle (_type_): _description_
+        oaci_prefix (_type_): _description_
         min_zoom (_type_): _description_
         max_zoom (_type_): _description_
         show_progress (_type_): _description_
@@ -124,7 +125,7 @@ async def fetch_all_tiles(tiles, bbox, airac_cycle, min_zoom, max_zoom, show_pro
 
     # --- Create filename with timestamp ---
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    mbtiles_file = f"area_{airac_cycle}_z{min_zoom}-{max_zoom}_{timestamp}.mbtiles"
+    mbtiles_file = f"{oaci_prefix}_{airac_cycle}_z{min_zoom}-{max_zoom}_{timestamp}.mbtiles"
 
     # --- Full path for MBTiles ---
     mbtiles_path = os.path.join(mbtiles_folder, mbtiles_file)
@@ -191,6 +192,12 @@ def main():
         help='AIRAC cycle number or "latest" (used in the tile URL, e.g. "2502" or "latest")'
     )
     parser.add_argument(
+        "--oaci-prefix",
+        type=str,
+        default="latest",
+        help='AIRAC cycle number or "latest" (used in the tile URL, e.g. "2502" or "latest")'
+    )
+    parser.add_argument(
         "--progress",
         action="store_true",
         help="Show progress bar during downloads"
@@ -201,6 +208,7 @@ def main():
     min_lon, min_lat, max_lon, max_lat = args.bbox
     min_zoom, max_zoom = args.zoom
     airac_cycle = args.airac.strip()
+    oaci_prefix = args.oaci_prefix.strip()
     show_progress = args.progress
 
     print(f"🔹 Generating MBTiles for bbox={args.bbox}, zooms={min_zoom}-{max_zoom}, AIRAC={airac_cycle}")
@@ -211,7 +219,7 @@ def main():
         print(f"Zoom {zoom}: {len(tiles)} tiles")
         all_tiles.extend(tiles)
 
-    asyncio.run(fetch_all_tiles(all_tiles, args.bbox, airac_cycle, min_zoom, max_zoom, show_progress))
+    asyncio.run(fetch_all_tiles(all_tiles, args.bbox, airac_cycle, oaci_prefix, min_zoom, max_zoom, show_progress))
 
 
 if __name__ == "__main__":

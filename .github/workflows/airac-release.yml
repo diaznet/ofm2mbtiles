@@ -5,20 +5,23 @@ on:
     inputs:
       airac_cycle:
         description: "AIRAC cycle (e.g. 2503 or 'latest')"
-        required: true
+        required: false
       bbox:
         description: "Bounding box coordinates (min_lon min_lat max_lon max_lat)"
         required: true
       zoom:
         description: "Zoom range (min_zoom max_zoom)"
         required: true
-        default: "7 12"
+        default: "12 12"
       oaci_prefix:
         description: "OACI code prefix for naming (e.g. 'LF' for France)"
         required: true
 
+  schedule:
+    - cron: "0 0 */28 * *"  # runs every 28 days
+
 jobs:
-  build-and-release:
+  build-and-release-mbtiles:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,48 +36,81 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt tqdm aiohttp mercantile
+          pip install -r requirements.txt
 
-      - name: Prepare bbox and zoom
-        id: params
+      - name: Determine AIRAC
+        id: airac
         run: |
-          # Split bbox and zoom strings into shell arrays
-          BBOX=(${{ github.event.inputs.bbox }})
-          ZOOM=(${{ github.event.inputs.zoom }})
-          echo "min_lon=${BBOX[0]}" >> $GITHUB_OUTPUT
-          echo "min_lat=${BBOX[1]}" >> $GITHUB_OUTPUT
-          echo "max_lon=${BBOX[2]}" >> $GITHUB_OUTPUT
-          echo "max_lat=${BBOX[3]}" >> $GITHUB_OUTPUT
-          echo "min_zoom=${ZOOM[0]}" >> $GITHUB_OUTPUT
-          echo "max_zoom=${ZOOM[1]}" >> $GITHUB_OUTPUT
+          if [ -n "${{ github.event.inputs.airac_cycle }}" ]; then
+            # Use manual input if provided
+            echo "airac=${{ github.event.inputs.airac_cycle }}" >> $GITHUB_OUTPUT
+            echo "✅ Using manual AIRAC: ${{ github.event.inputs.airac_cycle }}"
+          else
+            # Compute automatically
+            AIRAC=$(python3 - <<'PYTHON'
+          from airac_utils import get_current_airac
+          airac_cycle, _ = get_current_airac()
+          print(airac_cycle)
+          PYTHON
+          )
+            echo "airac=$AIRAC" >> $GITHUB_OUTPUT
+            echo "✅ Computed current AIRAC: $AIRAC"
+          fi
 
-      - name: Generate MBTiles
+      - name: Load regions from JSON
+        id: regions
         run: |
-          echo "🔹 Generating AIRAC=${{ github.event.inputs.airac_cycle }} bbox=${{ github.event.inputs.bbox }} zoom=${{ github.event.inputs.zoom }}"
-          python OFM2MBTiles.py \
-            --bbox ${{ steps.params.outputs.min_lon }} ${{ steps.params.outputs.min_lat }} ${{ steps.params.outputs.max_lon }} ${{ steps.params.outputs.max_lat }} \
-            --zoom ${{ steps.params.outputs.min_zoom }} ${{ steps.params.outputs.max_zoom }} \
-            --airac ${{ github.event.inputs.airac_cycle }} \
-            --progress
-          ls -lh mbtiles/
+          REGIONS=$(python - <<'PYTHON'
+          import json
 
-      - name: Get generated file name
-        id: findfile
+          with open("pipeline-config.json") as f:
+              data = json.load(f)
+
+          regions_list = []
+          for prefix, info in data.items():
+              bbox_str = ",".join(str(x) for x in info["bbox"])
+              zoom_str = ",".join(str(x) for x in info["zoom"])
+              regions_list.append(f"{prefix}:{bbox_str}:{zoom_str}")
+
+          print(" ".join(regions_list))
+          PYTHON
+          )
+          echo "REGIONS=$REGIONS" >> $GITHUB_ENV
+          echo "✅ Loaded regions: $REGIONS"
+
+      - name: Generate MBTiles for all regions
         run: |
-          FILE=$(ls -t mbtiles/*.mbtiles | head -n 1)
-          echo "file=$FILE" >> $GITHUB_OUTPUT
-          echo "📦 Found MBTiles: $FILE"
+          mkdir -p mbtiles
+          for REGION in $REGIONS; do
+            PREFIX=${REGION%%:*}
+            REST=${REGION#*:}
+            BBOX=${REST%%:*}
+            ZOOM=${REST#*:}
+            echo "🔹 Generating MBTiles for $PREFIX with bbox $BBOX and zoom $ZOOM (AIRAC ${{ steps.airac.outputs.airac }})"
+            
+            python OFM2MBTiles.py \
+              --bbox $(echo $BBOX | tr ',' ' ') \
+              --zoom $(echo $ZOOM | tr ',' ' ') \
+              --airac ${{ steps.airac.outputs.airac }} \
+              --oaci-prefix $PREFIX
+          done
+
+      - name: Get generated files
+        id: findfiles
+        run: |
+          FILES=$(ls -1 mbtiles/*.mbtiles | tr '\n' ' ')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          echo "📦 Found MBTiles files: $FILES"
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "AIRAC-${{ github.event.inputs.airac_cycle }}"
-          name: "AIRAC ${{ github.event.inputs.airac_cycle }}"
+          tag_name: "AIRAC-${{ steps.airac.outputs.airac }}"
+          name: "AIRAC ${{ steps.airac.outputs.airac }}"
           body: |
-            Automated release for AIRAC cycle **${{ github.event.inputs.airac_cycle }}**  
-            Bounding box: `${{ github.event.inputs.bbox }}`  
-            Zoom range: `${{ github.event.inputs.zoom }}`
-          files: ${{ steps.findfile.outputs.file }}
+            Automated release for AIRAC cycle **${{ steps.airac.outputs.airac }}**  
+            Regions: $(python -c 'import json; data=json.load(open("pipeline-config.json")); print(", ".join(data.keys()))')  
+          files: ${{ steps.findfiles.outputs.files }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
