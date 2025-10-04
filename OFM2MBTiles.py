@@ -8,7 +8,7 @@ import mercantile
 from datetime import datetime
 import argparse
 from tqdm import tqdm
-from os import path
+import os
 
 CONCURRENT_REQUESTS = 10
 RETRY_LIMIT = 3
@@ -118,10 +118,19 @@ async def fetch_all_tiles(tiles, bbox, airac_cycle, min_zoom, max_zoom, show_pro
         _type_: _description_
     """
 
+    # --- Ensure folder exists ---
+    mbtiles_folder = os.path.join("mbtiles", "")
+    os.makedirs(mbtiles_folder, exist_ok=True)  # ✅ creates folder if missing
+
+    # --- Create filename with timestamp ---
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     mbtiles_file = f"area_{airac_cycle}_z{min_zoom}-{max_zoom}_{timestamp}.mbtiles"
-    mbtiles_folder = "mbtiles" + path.sep
-    conn = create_mbtiles(mbtiles_folder + mbtiles_file, bbox, min_zoom, max_zoom)
+
+    # --- Full path for MBTiles ---
+    mbtiles_path = os.path.join(mbtiles_folder, mbtiles_file)
+
+    # --- Create MBTiles ---
+    conn = create_mbtiles(mbtiles_path, bbox, min_zoom, max_zoom)
     c = conn.cursor()
 
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
