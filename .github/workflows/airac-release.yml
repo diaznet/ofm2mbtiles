@@ -54,7 +54,8 @@ jobs:
           python OFM2MBTiles.py \
             --bbox ${{ steps.params.outputs.min_lon }} ${{ steps.params.outputs.min_lat }} ${{ steps.params.outputs.max_lon }} ${{ steps.params.outputs.max_lat }} \
             --zoom ${{ steps.params.outputs.min_zoom }} ${{ steps.params.outputs.max_zoom }} \
-            --airac ${{ github.event.inputs.airac_cycle }}
+            --airac ${{ github.event.inputs.airac_cycle }} \
+            --progress
           ls -lh mbtiles/
 
       - name: Get generated file name
@@ -65,15 +66,15 @@ jobs:
           echo "📦 Found MBTiles: $FILE"
 
       - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ github.event.inputs.oaci_prefix }}-AIRAC-${{ github.event.inputs.airac_cycle }}"
-          name: "${{ github.event.inputs.oaci_prefix }} / AIRAC ${{ github.event.inputs.airac_cycle }}"
+          tag_name: "AIRAC-${{ github.event.inputs.airac_cycle }}"
+          name: "AIRAC ${{ github.event.inputs.airac_cycle }}"
           body: |
             Automated release for AIRAC cycle **${{ github.event.inputs.airac_cycle }}**  
             Bounding box: `${{ github.event.inputs.bbox }}`  
             Zoom range: `${{ github.event.inputs.zoom }}`
-            OACI prefix: `${{ github.event.inputs.oaci_prefix }}`
           files: ${{ steps.findfile.outputs.file }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
