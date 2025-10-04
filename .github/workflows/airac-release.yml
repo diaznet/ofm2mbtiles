@@ -26,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: |
@@ -50,7 +50,7 @@ jobs:
         run: |
           mkdir -p mbtiles
           echo "🔹 Generating AIRAC=${{ github.event.inputs.airac_cycle }} bbox=${{ github.event.inputs.bbox }} zoom=${{ github.event.inputs.zoom }}"
-          python generate_mbtiles.py \
+          python OFM2MBTiles.py \
             --bbox ${{ steps.params.outputs.min_lon }} ${{ steps.params.outputs.min_lat }} ${{ steps.params.outputs.max_lon }} ${{ steps.params.outputs.max_lat }} \
             --zoom ${{ steps.params.outputs.min_zoom }} ${{ steps.params.outputs.max_zoom }} \
             --airac ${{ github.event.inputs.airac_cycle }}
