@@ -9,11 +9,13 @@ on:
       bbox:
         description: "Bounding box coordinates (min_lon min_lat max_lon max_lat)"
         required: true
-        default: "5.9 45.8 10.5 47.8"
       zoom:
         description: "Zoom range (min_zoom max_zoom)"
         required: true
         default: "7 12"
+      oaci_prefix:
+        description: "OACI code prefix for naming (e.g. 'LF' for France)"
+        required: true
 
 jobs:
   build-and-release:
@@ -48,7 +50,6 @@ jobs:
 
       - name: Generate MBTiles
         run: |
-          mkdir -p mbtiles
           echo "🔹 Generating AIRAC=${{ github.event.inputs.airac_cycle }} bbox=${{ github.event.inputs.bbox }} zoom=${{ github.event.inputs.zoom }}"
           python OFM2MBTiles.py \
             --bbox ${{ steps.params.outputs.min_lon }} ${{ steps.params.outputs.min_lat }} ${{ steps.params.outputs.max_lon }} ${{ steps.params.outputs.max_lat }} \
@@ -66,24 +67,13 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "AIRAC-${{ github.event.inputs.airac_cycle }}"
-          name: "AIRAC ${{ github.event.inputs.airac_cycle }}"
+          tag_name: "${{ github.event.inputs.oaci_prefix }}-AIRAC-${{ github.event.inputs.airac_cycle }}"
+          name: "${{ github.event.inputs.oaci_prefix }} / AIRAC ${{ github.event.inputs.airac_cycle }}"
           body: |
             Automated release for AIRAC cycle **${{ github.event.inputs.airac_cycle }}**  
             Bounding box: `${{ github.event.inputs.bbox }}`  
             Zoom range: `${{ github.event.inputs.zoom }}`
+            OACI prefix: `${{ github.event.inputs.oaci_prefix }}`
           files: ${{ steps.findfile.outputs.file }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Update "latest" symlink and commit
-        run: |
-          cd mbtiles
-          FILE=$(ls -t *.mbtiles | head -n 1)
-          ln -sf "$FILE" latest
-          cd ..
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add mbtiles/latest
-          git commit -m "Update latest to $FILE" || echo "No changes to commit"
-          git push
