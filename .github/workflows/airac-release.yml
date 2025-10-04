@@ -6,6 +6,7 @@ on:
       airac_cycle:
         description: "AIRAC cycle (e.g. 2503 or 'latest')"
         required: false
+        default: "latest"
       bbox:
         description: "Bounding box coordinates (min_lon min_lat max_lon max_lat)"
         required: true
@@ -18,13 +19,28 @@ on:
         required: true
 
   schedule:
-    - cron: "0 0 */28 * *"  # runs every 28 days
+    - cron: "0 0 * * *"  # daily at midnight UTC; workflow will check 28-day cycle
 
 jobs:
   build-and-release-mbtiles:
     runs-on: ubuntu-latest
 
     steps:
+
+      # Skip scheduled runs until the correct AIRAC start date
+      - name: Skip if not AIRAC start date
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          FIRST_AIRAC="2025-01-23"
+          TODAY=$(date -u +%F)
+          DIFF=$(( ($(date -ud $TODAY +%s) - $(date -ud $FIRST_AIRAC +%s)) / 86400 ))
+
+          if [ $DIFF -lt 0 ] || [ $(( DIFF % 28 )) -ne 0 ]; then
+            echo "Today is not an AIRAC start date. Skipping workflow."
+            exit 0
+          fi
+          echo "✅ Today is AIRAC start date. Proceeding."
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -58,6 +74,7 @@ jobs:
           fi
 
       - name: Load regions from JSON
+        if: ${{ github.event_name == 'schedule' }}
         id: regions
         run: |
           REGIONS=$(python - <<'PYTHON'
@@ -78,22 +95,32 @@ jobs:
           echo "REGIONS=$REGIONS" >> $GITHUB_ENV
           echo "✅ Loaded regions: $REGIONS"
 
-      - name: Generate MBTiles for all regions
+      - name: Generate MBTiles
         run: |
           mkdir -p mbtiles
-          for REGION in $REGIONS; do
-            PREFIX=${REGION%%:*}
-            REST=${REGION#*:}
-            BBOX=${REST%%:*}
-            ZOOM=${REST#*:}
-            echo "🔹 Generating MBTiles for $PREFIX with bbox $BBOX and zoom $ZOOM (AIRAC ${{ steps.airac.outputs.airac }})"
-            
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            # Loop over all regions from JSON
+            for REGION in $REGIONS; do
+              PREFIX=${REGION%%:*}
+              REST=${REGION#*:}
+              BBOX=${REST%%:*}
+              ZOOM=${REST#*:}
+              echo "🔹 Generating MBTiles for $PREFIX with bbox $BBOX and zoom $ZOOM (AIRAC ${{ steps.airac.outputs.airac }})"
+              python OFM2MBTiles.py \
+                --bbox $(echo $BBOX | tr ',' ' ') \
+                --zoom $(echo $ZOOM | tr ',' ' ') \
+                --airac ${{ steps.airac.outputs.airac }} \
+                --oaci-prefix $PREFIX
+            done
+          else
+            # Manual run: use workflow_dispatch inputs
+            echo "🔹 Generating MBTiles for ${{ github.event.inputs.oaci_prefix }} with bbox ${{ github.event.inputs.bbox }} and zoom ${{ github.event.inputs.zoom }} (AIRAC ${{ steps.airac.outputs.airac }})"
             python OFM2MBTiles.py \
-              --bbox $(echo $BBOX | tr ',' ' ') \
-              --zoom $(echo $ZOOM | tr ',' ' ') \
+              --bbox ${{ github.event.inputs.bbox }} \
+              --zoom ${{ github.event.inputs.zoom }} \
               --airac ${{ steps.airac.outputs.airac }} \
-              --oaci-prefix $PREFIX
-          done
+              --oaci-prefix ${{ github.event.inputs.oaci_prefix }}
+          fi
 
       - name: Get generated files
         id: findfiles
