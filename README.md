@@ -22,6 +22,22 @@ The workflow also publishes generated MBTiles as **GitHub Releases**.
 
 ---
 
+## Why ?
+
+OpenFlightMaps releases its data via MBTiles archives, but they do not provide in their archive the highest level of zoom.
+
+The highest level of zoom displays traffic patterm for some airports in some countries. Therefore I ahev developped this repository to be able to generate MBTiles on demand, for selected countries, for selected levels of zoom.
+
+![Highest level of Zoom in preview map](docs/assets/traffic_pattern_example.png "Highest level of Zoom in preview map")
+
+You can then import the MBTiles files in your favorite app.
+
+For example, I use the excellent [SDVFR  Next](https://skydreamsoft.fr/fr_FR/page/sdvfr-next-app) and import the highest level of zoom as an overlay in my planning / navigation app:
+
+![Zoom in SDVFR Next](docs/assets/zoom_to_traffic_pattern.gif "Zoom in SDVFR Next")
+
+---
+
 ## Repository Structure
 
 ```
@@ -146,3 +162,8 @@ python OFM2MBTiles.py \
   --airac 2510 \
   --oaci-prefix LS
 ```
+
+
+## Author
+
+Jeremy Diaz

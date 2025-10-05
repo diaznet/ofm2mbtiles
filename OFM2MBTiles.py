@@ -18,30 +18,35 @@ RETRY_LIMIT = 3
 TILE_SIZE = 512
 
 
-def tms_y(z, y):
+def tms_y(z: int, y: int) -> int:
     """Convert XYZ Y to TMS Y coordinate.
 
     Args:
-        z (_type_): _description_
-        y (_type_): _description_
+        z (int): Zoom level
+        y (int): XYZ Y coordinate
 
     Returns:
-        _type_: _description_
+        int: TMS Y coordinate
     """
     return (2**z - 1) - y
 
 
-def create_mbtiles(path, bbox, min_zoom, max_zoom):
-    """_summary_
+def create_mbtiles(
+    path: str,
+    bbox: list[float],
+    min_zoom: int,
+    max_zoom: int
+) -> sqlite3.Connection:
+    """Create an MBTiles SQLite database and set up schema and metadata.
 
     Args:
-        path (_type_): _description_
-        bbox (_type_): _description_
-        min_zoom (_type_): _description_
-        max_zoom (_type_): _description_
+        path (str): Path to MBTiles file
+        bbox (list[float]): Bounding box [min_lon, min_lat, max_lon, max_lat]
+        min_zoom (int): Minimum zoom level
+        max_zoom (int): Maximum zoom level
 
     Returns:
-        _type_: _description_
+        sqlite3.Connection: SQLite connection object
     """
 
     conn = sqlite3.connect(path)
@@ -77,18 +82,24 @@ def create_mbtiles(path, bbox, min_zoom, max_zoom):
     return conn
 
 
-async def download_tile(session, url, z, x, y):
-    """_summary_
+async def download_tile(
+    session: aiohttp.ClientSession,
+    url: str,
+    z: int,
+    x: int,
+    y: int
+) -> tuple[int, int, int, bytes] | None:
+    """Download a single tile with retries.
 
     Args:
-        session (_type_): _description_
-        url (_type_): _description_
-        z (_type_): _description_
-        x (_type_): _description_
-        y (_type_): _description_
+        session (aiohttp.ClientSession): HTTP session
+        url (str): Tile URL
+        z (int): Zoom level
+        x (int): Tile X
+        y (int): Tile Y
 
     Returns:
-        _type_: _description_
+        tuple[int, int, int, bytes] | None: (z, x, y, tile data) or None on failure
     """
 
     for attempt in range(1, RETRY_LIMIT + 1):
@@ -106,20 +117,28 @@ async def download_tile(session, url, z, x, y):
     return None
 
 
-async def fetch_all_tiles(tiles, bbox, airac_cycle, oaci_prefix, min_zoom, max_zoom, show_progress):
-    """_summary_
+async def fetch_all_tiles(
+    tiles: list[mercantile.Tile],
+    bbox: list[float],
+    airac_cycle: str,
+    oaci_prefix: str,
+    min_zoom: int,
+    max_zoom: int,
+    show_progress: bool
+) -> None:
+    """Download all tiles and store them in an MBTiles file.
 
     Args:
-        tiles (_type_): _description_
-        bbox (_type_): _description_
-        airac_cycle (_type_): _description_
-        oaci_prefix (_type_): _description_
-        min_zoom (_type_): _description_
-        max_zoom (_type_): _description_
-        show_progress (_type_): _description_
+        tiles (list[mercantile.Tile]): List of tiles to download
+        bbox (list[float]): Bounding box
+        airac_cycle (str): AIRAC cycle string
+        oaci_prefix (str): OACI prefix string
+        min_zoom (int): Minimum zoom level
+        max_zoom (int): Maximum zoom level
+        show_progress (bool): Whether to show progress bar
 
     Returns:
-        _type_: _description_
+        None
     """
 
     # --- Ensure folder exists ---
@@ -140,7 +159,7 @@ async def fetch_all_tiles(tiles, bbox, airac_cycle, oaci_prefix, min_zoom, max_z
     base_url_template = f"https://nwy-tiles-api.prod.newaydata.com/tiles/{{z}}/{{x}}/{{y}}.png?path={airac_cycle}/aero/latest"
 
     async with aiohttp.ClientSession() as session:
-        async def sem_download(tile):
+        async def sem_download(tile: mercantile.Tile) -> tuple[int, int, int, bytes] | None:
             async with semaphore:
                 url = base_url_template.format(z=tile.z, x=tile.x, y=tile.y)
                 return await download_tile(session, url, tile.z, tile.x, tile.y)
@@ -165,9 +184,8 @@ async def fetch_all_tiles(tiles, bbox, airac_cycle, oaci_prefix, min_zoom, max_z
     print(f"\n✅ MBTiles file created: {mbtiles_file}")
 
 
-def main():
-    """_summary_
-    """
+def main() -> None:
+    """Main entry point for the script."""
     parser = argparse.ArgumentParser(
         description="Generate an MBTiles file from OpenFlightMaps tile server for a given bounding box, zoom range, and AIRAC cycle."
     )
@@ -207,17 +225,23 @@ def main():
 
     args = parser.parse_args()
 
+    min_lon: float
+    min_lat: float
+    max_lon: float
+    max_lat: float
     min_lon, min_lat, max_lon, max_lat = args.bbox
+    min_zoom: int
+    max_zoom: int
     min_zoom, max_zoom = args.zoom
-    airac_cycle = args.airac.strip()
-    oaci_prefix = args.oaci_prefix.strip()
-    show_progress = args.progress
+    airac_cycle: str = args.airac.strip()
+    oaci_prefix: str = args.oaci_prefix.strip()
+    show_progress: bool = args.progress
 
     print(f"🔹 Generating MBTiles for bbox={args.bbox}, zooms={min_zoom}-{max_zoom}, AIRAC={airac_cycle}")
 
-    all_tiles = []
+    all_tiles: list[mercantile.Tile] = []
     for zoom in range(min_zoom, max_zoom + 1):
-        tiles = list(mercantile.tiles(min_lon, min_lat, max_lon, max_lat, [zoom]))
+        tiles: list[mercantile.Tile] = list(mercantile.tiles(min_lon, min_lat, max_lon, max_lat, [zoom]))
         print(f"Zoom {zoom}: {len(tiles)} tiles")
         all_tiles.extend(tiles)
 
