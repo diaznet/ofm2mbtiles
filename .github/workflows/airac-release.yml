@@ -93,8 +93,13 @@ jobs:
         id: regions
         run: |
           REGIONS=$(python utils.py regions)
-          echo "REGIONS=$REGIONS" >> $GITHUB_ENV
-          echo "✅ Loaded regions: $REGIONS"
+          {
+            echo 'REGIONS<<EOF'
+            echo "$REGIONS"
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          echo "✅ Loaded regions:"
+          echo "$REGIONS"
 
       # ────────────────────────────────
       # Step 4: Generate MBTiles
@@ -103,6 +108,7 @@ jobs:
         run: |
           mkdir -p mbtiles
           if [ "${{ github.event_name }}" == "schedule" ]; then
+            IFS=$'\n'
             for REGION in $REGIONS; do
               PREFIX=${REGION%%:*}
               REST=${REGION#*:}
@@ -115,6 +121,7 @@ jobs:
                 --airac ${{ steps.airac.outputs.airac }} \
                 --oaci-prefix $PREFIX
             done
+            unset IFS
           else
             echo "🔹 Manual run for ${{ github.event.inputs.oaci_prefix }} (bbox ${{ github.event.inputs.bbox }} zoom ${{ github.event.inputs.zoom }})"
             python OFM2MBTiles.py \
