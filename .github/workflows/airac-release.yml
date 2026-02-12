@@ -112,21 +112,30 @@ jobs:
             for REGION in $REGIONS; do
               PREFIX=${REGION%%:*}
               REST=${REGION#*:}
-              BBOX=${REST%%:*}
-              ZOOM=${REST#*:}
-              echo "🔹 Generating for $PREFIX (bbox=$BBOX zoom=$ZOOM AIRAC=${{ steps.airac.outputs.airac }})"
+              BBOX_COMMAS=${REST%%:*}
+              ZOOM_COMMAS=${REST#*:}
+              
+              BBOX_SPACED=${BBOX_COMMAS//,/ }
+              ZOOM_SPACED=${ZOOM_COMMAS//,/ }
+
+              echo "🔹 Generating for $PREFIX (bbox=$BBOX_SPACED zoom=$ZOOM_SPACED)"
+              
               python OFM2MBTiles.py \
-                --bbox $(echo $BBOX | tr ',' ' ') \
-                --zoom $(echo $ZOOM | tr ',' ' ') \
+                --bbox $BBOX_SPACED \
+                --zoom $ZOOM_SPACED \
                 --airac ${{ steps.airac.outputs.airac }} \
                 --oaci-prefix $PREFIX
             done
             unset IFS
           else
-            echo "🔹 Manual run for ${{ github.event.inputs.oaci_prefix }} (bbox ${{ github.event.inputs.bbox }} zoom ${{ github.event.inputs.zoom }})"
+            echo "🔹 Manual run for ${{ github.event.inputs.oaci_prefix }}"
+            
+            MANUAL_BBOX="${{ github.event.inputs.bbox }}"
+            MANUAL_ZOOM="${{ github.event.inputs.zoom }}"
+            
             python OFM2MBTiles.py \
-              --bbox ${{ github.event.inputs.bbox }} \
-              --zoom ${{ github.event.inputs.zoom }} \
+              --bbox $MANUAL_BBOX \
+              --zoom $MANUAL_ZOOM \
               --airac ${{ steps.airac.outputs.airac }} \
               --oaci-prefix ${{ github.event.inputs.oaci_prefix }}
           fi

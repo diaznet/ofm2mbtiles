@@ -21,31 +21,44 @@ AIRAC_CYCLE_DAYS = 28
 def get_current_airac(debug=False):
     """Return the current AIRAC cycle as (cycle_string, next_start_date)."""
     now = datetime.now(timezone.utc)
+    
+    # Calculate how many full 28-day periods have passed since reference
     delta_days = (now - FIRST_AIRAC_DATE).days
-
+    periods_since_ref = delta_days // AIRAC_CYCLE_DAYS
+    
+    
     if debug:
         print(f"[DEBUG] Now: {now.isoformat()}")
         print(f"[DEBUG] Reference AIRAC start: {FIRST_AIRAC_DATE.date()}")
         print(f"[DEBUG] Days since reference: {delta_days}")
+        print(f"[DEBUG] Periods since reference: {periods_since_ref}")
+        
+    # The start date of the current active cycle
+    current_cycle_start = FIRST_AIRAC_DATE + timedelta(days=periods_since_ref * AIRAC_CYCLE_DAYS)
+    next_start_date = current_cycle_start + timedelta(days=AIRAC_CYCLE_DAYS)
 
-    if delta_days < 0:
-        if debug:
-            print("[DEBUG] Before first AIRAC reference date.")
-        return f"{FIRST_AIRAC_DATE.year % 100:02d}01", FIRST_AIRAC_DATE
-
-    # Compute current cycle number and year reset
-    cycle_number = (delta_days // AIRAC_CYCLE_DAYS) + 1
-    year_short = now.year % 100
-    cycles_this_year = (now - datetime(now.year, 1, 1, tzinfo=timezone.utc)).days // AIRAC_CYCLE_DAYS + 1
-
-    if cycles_this_year > 13:
-        cycles_this_year = 1
+    # Determine the AIRAC string (YYxx)
+    # The cycle number is based on how many starts have occurred in that specific calendar year
+    year = current_cycle_start.year
+    first_of_year = datetime(year, 1, 1, tzinfo=timezone.utc)
+    
+    # Find the first AIRAC start of the current year
+    # We backtrack from current_cycle_start in 28-day steps
+    check_date = current_cycle_start
+    while check_date - timedelta(days=AIRAC_CYCLE_DAYS) >= first_of_year:
+        check_date -= timedelta(days=AIRAC_CYCLE_DAYS)
+    
+    # Now check_date is the first AIRAC of the year. 
+    # Calculate sequence: ((Current - First of Year) / 28) + 1
+    cycle_in_year = ((current_cycle_start - check_date).days // AIRAC_CYCLE_DAYS) + 1
+    
+    airac_str = f"{year % 100:02d}{cycle_in_year:02d}"
 
     if debug:
-        print(f"[DEBUG] Current AIRAC cycle number this year: {cycles_this_year}")
-        print(f"[DEBUG] Next AIRAC start: {(now + timedelta(days=AIRAC_CYCLE_DAYS)).date()}")
+        print(f"[DEBUG] Current Cycle Start: {current_cycle_start.date()}")
+        print(f"[DEBUG] AIRAC String: {airac_str}")
 
-    return f"{year_short:02d}{cycles_this_year:02d}", now + timedelta(days=AIRAC_CYCLE_DAYS)
+    return airac_str, next_start_date
 
 
 def list_future_airacs(months=12, debug=False):
