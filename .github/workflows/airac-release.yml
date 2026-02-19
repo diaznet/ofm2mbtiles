@@ -108,8 +108,11 @@ jobs:
         run: |
           mkdir -p mbtiles
           if [ "${{ github.event_name }}" == "schedule" ]; then
-            IFS=$'\n'
-            for REGION in $REGIONS; do
+            # Use while read to process lines without breaking global word splitting
+            echo "$REGIONS" | while read -r REGION; do
+              # Skip empty lines
+              [ -z "$REGION" ] && continue
+              
               PREFIX=${REGION%%:*}
               REST=${REGION#*:}
               BBOX_COMMAS=${REST%%:*}
@@ -126,7 +129,6 @@ jobs:
                 --airac ${{ steps.airac.outputs.airac }} \
                 --oaci-prefix $PREFIX
             done
-            unset IFS
           else
             echo "🔹 Manual run for ${{ github.event.inputs.oaci_prefix }}"
             
