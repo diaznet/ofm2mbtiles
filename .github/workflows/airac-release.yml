@@ -106,10 +106,10 @@ jobs:
       # ────────────────────────────────
       - name: Generate MBTiles
         run: |
+          set -eo pipefail
           mkdir -p mbtiles
           if [ "${{ github.event_name }}" == "schedule" ]; then
-            # Use while read to process lines without breaking global word splitting
-            echo "$REGIONS" | while read -r REGION; do
+            while read -r REGION; do
               # Skip empty lines
               [ -z "$REGION" ] && continue
               
@@ -128,7 +128,7 @@ jobs:
                 --zoom $ZOOM_SPACED \
                 --airac ${{ steps.airac.outputs.airac }} \
                 --oaci-prefix $PREFIX
-            done
+            done <<< "$REGIONS"
           else
             echo "🔹 Manual run for ${{ github.event.inputs.oaci_prefix }}"
             
@@ -148,9 +148,18 @@ jobs:
       - name: Get generated files
         id: findfiles
         run: |
-          FILES=$(ls -1 mbtiles/*.mbtiles | tr '\n' ' ')
-          echo "files=$FILES" >> $GITHUB_OUTPUT
-          echo "📦 Found MBTiles files: $FILES"
+          FILES=$(ls -1 mbtiles/*.mbtiles 2>/dev/null)
+          if [ -z "$FILES" ]; then
+            echo "❌ No MBTiles files found!"
+            exit 1
+          fi
+          {
+            echo 'files<<EOF'
+            echo "$FILES"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+          echo "📦 Found MBTiles files:"
+          echo "$FILES"
 
       # ────────────────────────────────
       # Step 6: Region names (for release)

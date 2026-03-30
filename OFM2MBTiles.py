@@ -180,8 +180,15 @@ async def fetch_all_tiles(
                 )
 
     conn.commit()
+
+    tile_count = conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
     conn.close()
-    print(f"\n✅ MBTiles file created: {mbtiles_file}")
+
+    if tile_count == 0:
+        os.remove(mbtiles_path)
+        raise RuntimeError(f"No tiles downloaded for {oaci_prefix} — tile server may not have published this AIRAC yet")
+
+    print(f"\n✅ MBTiles file created: {mbtiles_file} ({tile_count} tiles)")
 
 
 def main() -> None:
